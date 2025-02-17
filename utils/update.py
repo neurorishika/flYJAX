@@ -43,14 +43,14 @@ if __name__ == "__main__":
 
     print()
 
-    # download latest rdp_client.py into package folder
-    rdp_client_web = "https://raw.githubusercontent.com/neurorishika/rdp-standard/main/rdp_client.py"
+    # # download latest rdp_client.py into package folder
+    # rdp_client_web = "https://raw.githubusercontent.com/neurorishika/rdp-standard/main/rdp_client.py"
 
-    print("Downloading latest rdp_client.py into package folder...")
-    os.system("curl {} -o {}/rdp_client.py".format(rdp_client_web, package_name))
-    print("Download complete.")
+    # print("Downloading latest rdp_client.py into package folder...")
+    # os.system("curl {} -o {}/rdp_client.py".format(rdp_client_web, package_name))
+    # print("Download complete.")
 
-    print()
+    # print()
 
     # download latest build.py and quickstart.py into utils folder
     build_web = "https://raw.githubusercontent.com/neurorishika/rpy-template/main/utils/build.py"
