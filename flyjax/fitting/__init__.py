@@ -4,24 +4,27 @@ import lazy_loader
 __getattr__, __dir__, __all__ = lazy_loader.attach(
     __name__,
     submodules={
+        'cv',
         'evaluation',
-        'evaluation_tools',
         'hierarchical',
         'joint',
         'train',
     },
     submod_attrs={
+        'cv': [
+            'k_fold_cross_validation_train',
+            'k_fold_cross_validation_train_hierarchical',
+            'k_fold_cross_validation_train_joint',
+            'k_fold_split_experiments',
+            'k_fold_split_subjects',
+        ],
         'evaluation': [
+            'aic',
+            'bic',
+            'likelihood_ratio_test',
             'log_likelihood_experiment',
             'negative_log_likelihood_experiment',
-        ],
-        'evaluation_tools': [
-            'compute_aic',
-            'compute_bic',
-            'compute_waic',
-            'cross_validation_score',
-            'k_fold_split',
-            'likelihood_ratio_test',
+            'total_negative_log_likelihood',
         ],
         'hierarchical': [
             'evaluate_hierarchical_model',
@@ -38,20 +41,21 @@ __getattr__, __dir__, __all__ = lazy_loader.attach(
         'train': [
             'evaluate_model',
             'multi_start_train',
-            'total_negative_log_likelihood',
             'train_model',
         ],
     },
 )
 
-__all__ = ['compute_aic', 'compute_bic', 'compute_waic',
-           'cross_validation_score', 'evaluate_hierarchical_model',
+__all__ = ['aic', 'bic', 'cv', 'evaluate_hierarchical_model',
            'evaluate_joint_model', 'evaluate_model', 'evaluation',
-           'evaluation_tools', 'hierarchical', 'hierarchical_train_model',
-           'joint', 'joint_train_model', 'k_fold_split',
-           'likelihood_ratio_test', 'log_likelihood_experiment',
-           'multi_start_hierarchical_train', 'multi_start_joint_train',
-           'multi_start_train', 'negative_log_likelihood_experiment',
+           'hierarchical', 'hierarchical_train_model', 'joint',
+           'joint_train_model', 'k_fold_cross_validation_train',
+           'k_fold_cross_validation_train_hierarchical',
+           'k_fold_cross_validation_train_joint', 'k_fold_split_experiments',
+           'k_fold_split_subjects', 'likelihood_ratio_test',
+           'log_likelihood_experiment', 'multi_start_hierarchical_train',
+           'multi_start_joint_train', 'multi_start_train',
+           'negative_log_likelihood_experiment',
            'total_negative_log_likelihood',
            'total_negative_log_likelihood_multi_group',
            'total_nll_hierarchical', 'train', 'train_model']

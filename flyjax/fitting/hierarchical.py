@@ -59,6 +59,7 @@ def hierarchical_train_model(
     sigma_prior: float = 1.0,
     verbose: bool = True,
     early_stopping: Optional[Dict[str, float]] = None,
+    progress_bar: bool = True,
 ) -> Tuple[chex.Array, chex.Array, bool]:
     """
     Jointly train the population-level parameters and the subject-specific parameters.
@@ -97,8 +98,8 @@ def hierarchical_train_model(
     convergence_threshold = (
         early_stopping.get("min_delta", 1e-2) if early_stopping is not None else 1e-2
     )
-    iterator = trange(
-        num_steps, desc="Hierarchical Training"
+    iterator = (
+        trange(num_steps, desc="Hierarchical Training") if progress_bar else range(num_steps)
     )  # always using tqdm for clarity
 
     for i in iterator:

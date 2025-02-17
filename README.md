@@ -5,7 +5,7 @@
 
 Author: [Rishika Mohanta](https://neurorishika.github.io/)
 
-Latest Build Date: 2025-02-17 09:16:03
+Latest Build Date: 2025-02-17 15:16:39
 
 ## About the Project
 
@@ -46,21 +46,42 @@ LICENSE
 README.md
 analysis
    |-- .gitkeep
+   |-- explore.ipynb
 data
    |-- .gitkeep
+flyjax
+   |-- __init__.py
+   |-- agent
+   |   |-- __init__.py
+   |   |-- model.py
+   |   |-- rl
+   |   |   |-- zoo.py
+   |-- fitting
+   |   |-- __init__.py
+   |   |-- cv.py
+   |   |-- evaluation.py
+   |   |-- hierarchical.py
+   |   |-- joint.py
+   |   |-- train.py
+   |-- simulation
+   |   |-- __init__.py
+   |   |-- parse.py
+   |   |-- simulate.py
+   |-- utils
+   |   |-- __init__.py
+   |   |-- plotting.py
 poetry.lock
 poetry.toml
 processed_data
    |-- .gitkeep
 project_readme.md
 pyproject.toml
-rpytemplate
-   |-- __init__.py
-   |-- rdp_client.py
 scripts
    |-- .gitkeep
 tests
    |-- __init__.py
+   |-- examples
+   |   |-- base_model_fitting.ipynb
 utils
    |-- build.py
    |-- quickstart.py

@@ -165,4 +165,5 @@ temp/
 directory.path
 
 # Mac OS
-**/.DS_Store
+
+**/.DS_Store./.venv/lib/python3.10/site-packages/jaxlib/xla_extension.so # LARGE FILE

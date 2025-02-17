@@ -7,27 +7,27 @@ if __name__ == "__main__":
     print("STARTING PROJECT TEMPLATE UPDATE PROCESS")
     print("========================================")
 
-    # download latest update.py into utils folder
-    update_web = "https://raw.githubusercontent.com/neurorishika/rpy-template/main/utils/update.py"
-    print("Downloading latest update.py into utils folder...")
-    os.system("curl {} -o utils/update.py.tmp".format(update_web))
-    print("Download complete.")
+    # # download latest update.py into utils folder
+    # update_web = "https://raw.githubusercontent.com/neurorishika/rpy-template/main/utils/update.py"
+    # print("Downloading latest update.py into utils folder...")
+    # os.system("curl {} -o utils/update.py.tmp".format(update_web))
+    # print("Download complete.")
     
-    print()
+    # print()
 
-    #check if update.py.tmp is different from update.py
-    if os.system("diff utils/update.py.tmp utils/update.py") != 0:
-        # replace update.py with update.py.tmp
-        os.system("mv utils/update.py.tmp utils/update.py")
-        # exit and ask user to run update.py again
-        print("An update fpr update.py was found and replaced. Please run 'poetry run python utils/update.py' again.")
-        exit(-1)
-    else:
-        # delete update.py.tmp
-        os.system("rm utils/update.py.tmp")
-        print("No updates for update.py found.")
+    # #check if update.py.tmp is different from update.py
+    # if os.system("diff utils/update.py.tmp utils/update.py") != 0:
+    #     # replace update.py with update.py.tmp
+    #     os.system("mv utils/update.py.tmp utils/update.py")
+    #     # exit and ask user to run update.py again
+    #     print("An update fpr update.py was found and replaced. Please run 'poetry run python utils/update.py' again.")
+    #     exit(-1)
+    # else:
+    #     # delete update.py.tmp
+    #     os.system("rm utils/update.py.tmp")
+    #     print("No updates for update.py found.")
 
-    print()
+    # print()
 
     # get package name from pyproject.toml
     with open("pyproject.toml", "r") as f:

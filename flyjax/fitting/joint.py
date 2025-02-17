@@ -58,6 +58,7 @@ def joint_train_model(
     delta_penalty_sigma: float = 1.0,
     verbose: bool = True,
     early_stopping: Optional[Dict[str, float]] = None,
+    progress_bar: bool = True,
 ) -> Tuple[chex.Array, chex.Array, bool]:
     """
     Jointly train control parameters and the difference delta.
