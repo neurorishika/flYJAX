@@ -4,21 +4,11 @@ import chex
 import optax
 from typing import List, Tuple, Callable, Optional, Dict, Union
 from tqdm.auto import trange
-
-def total_negative_log_likelihood(
-    params: chex.Array,
-    experiments: List[Tuple[chex.Array, chex.Array]]
-) -> jnp.ndarray:
-    """
-    Sum the negative log likelihoods over multiple experiments.
-    """
-    total_nll = 0.0
-    for choices, rewards in experiments:
-        total_nll += negative_log_likelihood_experiment(params, choices, rewards)
-    return total_nll
+from flyjax.fitting.evaluation import total_negative_log_likelihood
 
 def train_model(
     init_params: chex.Array,
+    agent: Callable,
     experiments: List[Tuple[chex.Array, chex.Array]],
     learning_rate: float = 0.01,
     num_steps: int = 1000,
@@ -43,6 +33,8 @@ def train_model(
 
     Args:
         init_params: Initial guess for the parameters.
+        agent: The agent model function that takes parameters and agent state and returns
+            a tuple (action_probs, new_agent_state).
         experiments: List of experiments, each as a tuple (choices, rewards).
         learning_rate: Learning rate for the Adam optimizer.
         num_steps: Maximum number of training steps.
@@ -63,7 +55,7 @@ def train_model(
     
     @jax.jit
     def step_fn(params, opt_state):
-        loss, grads = jax.value_and_grad(total_negative_log_likelihood)(params, experiments)
+        loss, grads = jax.value_and_grad(total_negative_log_likelihood)(params, agent, experiments)
         updates, opt_state = optimizer.update(grads, opt_state)
         params = optax.apply_updates(params, updates)
         return params, opt_state, loss
@@ -122,6 +114,7 @@ def train_model(
 def multi_start_train(
     n_restarts: int,
     init_param_sampler: Callable[[], chex.Array],
+    agent: Callable,
     training_experiments: List[Tuple[chex.Array, chex.Array]],
     learning_rate: float = 0.01,
     num_steps: int = 1000,
@@ -135,6 +128,7 @@ def multi_start_train(
     Args:
         n_restarts: Number of independent training runs.
         init_param_sampler: A function that returns an initial parameter array.
+        agent: The agent model function that takes parameters and agent state and returns
         training_experiments: The dataset (list of experiments) to train on.
         learning_rate: Learning rate for training.
         num_steps: Number of training steps per run.
@@ -156,7 +150,9 @@ def multi_start_train(
         init_params = init_param_sampler()
         # Train the model.
         recovered_params = train_model(
-            init_params, training_experiments,
+            init_params, 
+            agent,
+            training_experiments,
             learning_rate=learning_rate,
             num_steps=num_steps,
             verbose=verbose,
@@ -164,7 +160,7 @@ def multi_start_train(
             early_stopping=early_stopping
         )
         # Evaluate training performance (e.g., final negative log likelihood).
-        train_nll = total_negative_log_likelihood(recovered_params, training_experiments)
+        train_nll = total_negative_log_likelihood(recovered_params, agent, training_experiments)
         print(f"Restart {i+1} final training NLL: {train_nll:.4f}")
         all_losses.append(float(train_nll))
         if train_nll < best_loss:
@@ -176,6 +172,7 @@ def multi_start_train(
 
 def evaluate_model(
     params: chex.Array,
+    agent: Callable,
     experiments: List[Tuple[chex.Array, chex.Array]]
 ) -> float:
     """
@@ -183,5 +180,5 @@ def evaluate_model(
     
     Lower values indicate a better predictive fit.
     """
-    nll = total_negative_log_likelihood(params, experiments)
+    nll = total_negative_log_likelihood(params, agent, experiments)
     return float(nll)

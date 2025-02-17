@@ -1,11 +1,11 @@
-
 import chex
 import jax
 import jax.numpy as jnp
-from agent.model import agent
+from typing import Callable, List, Tuple
 
 def log_likelihood_experiment(
     params: chex.Array,
+    agent: Callable,
     choices: chex.Array,
     rewards: chex.Array
 ) -> jnp.ndarray:
@@ -33,11 +33,24 @@ def log_likelihood_experiment(
     _, log_probs = jax.lax.scan(trial_step, init_state, trial_data)
     return jnp.sum(log_probs)
 
-
 def negative_log_likelihood_experiment(
     params: chex.Array,
+    agent: Callable,
     choices: chex.Array,
     rewards: chex.Array
 ) -> jnp.ndarray:
     """Returns the negative log likelihood for a single experiment."""
-    return -log_likelihood_experiment(params, choices, rewards)
+    return -log_likelihood_experiment(params, agent, choices, rewards)
+
+def total_negative_log_likelihood(
+    params: chex.Array,
+    agent: Callable,
+    experiments: List[Tuple[chex.Array, chex.Array]]
+) -> jnp.ndarray:
+    """
+    Sum the negative log likelihoods over multiple experiments.
+    """
+    total_nll = 0.0
+    for choices, rewards in experiments:
+        total_nll += negative_log_likelihood_experiment(params, agent, choices, rewards)
+    return total_nll

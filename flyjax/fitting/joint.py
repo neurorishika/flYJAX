@@ -4,10 +4,13 @@ import chex
 import optax
 from typing import List, Tuple, Callable, Optional, Dict, Union
 from tqdm.auto import trange
+from flyjax.fitting.evaluation import total_negative_log_likelihood
+
 
 def total_negative_log_likelihood_multi_group(
     theta_control: chex.Array,
     delta: chex.Array,
+    agent: Callable,
     experiments_control: List[Tuple[chex.Array, chex.Array]],
     experiments_exp: List[Tuple[chex.Array, chex.Array]],
     delta_penalty_sigma: float = 1.0
@@ -23,6 +26,7 @@ def total_negative_log_likelihood_multi_group(
     Args:
         theta_control: Parameters for the control group.
         delta: Difference parameters, so that experimental parameters are theta_control + delta.
+        agent: The agent model function that takes parameters and agent state and returns
         experiments_control: List of (choices, rewards) for the control group.
         experiments_exp: List of (choices, rewards) for the experimental group.
         delta_penalty_sigma: Standard deviation of the Gaussian prior on delta.
@@ -31,10 +35,10 @@ def total_negative_log_likelihood_multi_group(
         Total negative log likelihood (control + experimental + penalty).
     """
     # Compute NLL for control data.
-    nll_control = total_negative_log_likelihood(theta_control, experiments_control)
+    nll_control = total_negative_log_likelihood(theta_control, agent, experiments_control)
     # Compute experimental parameters and its NLL.
     theta_exp = theta_control + delta
-    nll_exp = total_negative_log_likelihood(theta_exp, experiments_exp)
+    nll_exp = total_negative_log_likelihood(theta_exp, agent, experiments_exp)
     # Quadratic penalty on delta (MAP equivalent to a zero-mean Gaussian prior).
     penalty = jnp.sum((delta / delta_penalty_sigma)**2) / 2.0
     return nll_control + nll_exp + penalty
@@ -43,6 +47,7 @@ def total_negative_log_likelihood_multi_group(
 def joint_train_model(
     init_theta_control: chex.Array,
     init_delta: chex.Array,
+    agent: Callable,
     experiments_control: List[Tuple[chex.Array, chex.Array]],
     experiments_exp: List[Tuple[chex.Array, chex.Array]],
     n_params: int = 4,
@@ -69,7 +74,7 @@ def joint_train_model(
         delta = params[n_params:]
         # Use argnums=(0,1) so that gradients for theta_control and delta are computed.
         loss, grads = jax.value_and_grad(total_negative_log_likelihood_multi_group, argnums=(0,1))(
-            theta_control, delta, experiments_control, experiments_exp, delta_penalty_sigma)
+            theta_control, delta, agent, experiments_control, experiments_exp, delta_penalty_sigma)
         # Concatenate the two gradients to form one vector of shape (2 * n_params,).
         grads_combined = jnp.concatenate(grads)
         updates, opt_state = optimizer.update(grads_combined, opt_state)
@@ -91,6 +96,7 @@ def multi_start_joint_train(
     n_restarts: int,
     init_theta_sampler: Callable[[], chex.Array],
     init_delta_sampler: Callable[[], chex.Array],
+    agent: Callable,
     experiments_control: List[Tuple[chex.Array, chex.Array]],
     experiments_exp: List[Tuple[chex.Array, chex.Array]],
     n_params: int = 4,
@@ -115,7 +121,7 @@ def multi_start_joint_train(
         init_theta = init_theta_sampler()
         init_delta = init_delta_sampler()
         theta_opt, delta_opt = joint_train_model(
-            init_theta, init_delta,
+            init_theta, init_delta, agent,
             experiments_control, experiments_exp,
             n_params=n_params,
             learning_rate=learning_rate,
@@ -125,7 +131,7 @@ def multi_start_joint_train(
         )
         # Evaluate joint NLL for these parameters.
         joint_nll = total_negative_log_likelihood_multi_group(
-            theta_opt, delta_opt, experiments_control, experiments_exp, delta_penalty_sigma)
+            theta_opt, delta_opt, agent, experiments_control, experiments_exp, delta_penalty_sigma)
         print(f"Restart {i+1} final Joint NLL: {joint_nll:.4f}")
         all_losses.append(float(joint_nll))
         if joint_nll < best_loss:
@@ -139,6 +145,7 @@ def multi_start_joint_train(
 def evaluate_joint_model(
     theta_control: chex.Array,
     delta: chex.Array,
+    agent: Callable,
     experiments_control: List[Tuple[chex.Array, chex.Array]],
     experiments_exp: List[Tuple[chex.Array, chex.Array]],
     delta_penalty_sigma: float = 1.0
@@ -150,9 +157,9 @@ def evaluate_joint_model(
     Returns:
         (nll_control, nll_exp, joint_nll)
     """
-    nll_control = total_negative_log_likelihood(theta_control, experiments_control)
+    nll_control = total_negative_log_likelihood(theta_control, agent, experiments_control)
     theta_exp = theta_control + delta
-    nll_exp = total_negative_log_likelihood(theta_exp, experiments_exp)
+    nll_exp = total_negative_log_likelihood(theta_exp, agent, experiments_exp)
     penalty = jnp.sum((delta / delta_penalty_sigma)**2) / 2.0
     joint_nll = nll_control + nll_exp + penalty
     return float(nll_control), float(nll_exp), float(joint_nll)

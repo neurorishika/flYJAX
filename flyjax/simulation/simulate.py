@@ -3,13 +3,13 @@ import jax
 import jax.numpy as jnp
 from functools import partial
 import chex
-from typing import Tuple, List
-from agent.model import agent
+from typing import Tuple, List, Callable
 from tqdm import tqdm
 
 def simulate_experiment(
     params: chex.Array,
     reward_matrix: jnp.ndarray,
+    agent: Callable,
     rng_key: chex.Array,
     baiting: bool = False
 ) -> Tuple[jnp.ndarray, jnp.ndarray]:
@@ -20,6 +20,8 @@ def simulate_experiment(
         params: The true parameters used to simulate the agent.
         reward_matrix: A (num_trials, 2) array, where each row specifies the reward
                        probability for each option on that trial.
+        agent: The agent function, which should have the signature:
+                (params, agent_state, choice, reward) -> (new_probs, new_state)
         rng_key: A JAX random key.
         baiting: If True, implements baiting. In baiting mode, at the beginning of each trial,
                  each option is sampled for a reward with the corresponding probability
@@ -81,6 +83,7 @@ def simulate_experiment(
 def simulate_dataset(
     params: chex.Array,
     reward_matrices: List[jnp.ndarray],
+    agent: Callable,
     rng_key: chex.Array,
     baiting: bool = False
 ) -> List[Tuple[jnp.ndarray, jnp.ndarray]]:
@@ -93,6 +96,8 @@ def simulate_dataset(
     Args:
         params: The true parameters used for simulation.
         reward_matrices: A list of reward matrices (one per experiment).
+        agent: The agent function, which should have the signature:
+                (params, agent_state, choice, reward) -> (new_probs, new_state)
         rng_key: A JAX random key.
         baiting: If True, the simulation uses the baiting mechanism described above.
         
@@ -102,13 +107,14 @@ def simulate_dataset(
     experiments = []
     for reward_matrix in tqdm(reward_matrices, desc="Simulating experiments"):
         rng_key, subkey = jax.random.split(rng_key)
-        exp_data = simulate_experiment(params, reward_matrix, subkey, baiting=baiting)
+        exp_data = simulate_experiment(params, reward_matrix, agent, subkey, baiting=baiting)
         experiments.append(exp_data)
     return experiments
 
 def simulate_dataset_different_params(
     params_stack: List[chex.Array],
     reward_matrices: List[jnp.ndarray],
+    agent: Callable,
     rng_key: chex.Array,
     baiting: bool = False
 ) -> List[List[Tuple[jnp.ndarray, jnp.ndarray]]]:
@@ -121,6 +127,8 @@ def simulate_dataset_different_params(
     Args:
         params_stack: A list of parameter sets (one per experiment).
         reward_matrices: A list of reward matrices (one per experiment).
+        agent: The agent function, which should have the signature:
+                (params, agent_state, choice, reward) -> (new_probs, new_state)
         rng_key: A JAX random key.
         baiting: If True, the simulation uses the baiting mechanism described above.
 
@@ -129,19 +137,26 @@ def simulate_dataset_different_params(
     """
     experiments = []
     for params, reward_matrix in tqdm(zip(params_stack, reward_matrices), desc="Simulating datasets"):
-        exp_data = simulate_dataset(params, reward_matrix, rng_key, baiting=baiting)
+        exp_data = simulate_dataset(params, reward_matrix, agent, rng_key, baiting=baiting)
         experiments.append(exp_data)
     return experiments
 
 
-@partial(jax.jit, static_argnames=['baiting'])
-def simulate_experiment_jit(params, reward_matrix, rng_key, baiting=False):
+@partial(jax.jit, static_argnames=['agent','baiting'])
+def simulate_experiment_jit(
+        params: chex.Array,
+        reward_matrix: jnp.ndarray,
+        agent: Callable,
+        rng_key: chex.Array,
+        baiting: bool = False
+) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """
     Simulate a single experiment using a JIT-compiled loop.
     
     Args:
         params: Agent parameters.
         reward_matrix: A (num_trials, 2) array of reward probabilities.
+        agent: The agent function.
         rng_key: A JAX random key.
         baiting: (bool) Whether to use the baiting mechanism.
     
@@ -230,14 +245,21 @@ def simulate_experiment_jit(params, reward_matrix, rng_key, baiting=False):
     return choices, rewards
 
 
-@partial(jax.jit, static_argnames=['baiting'])
-def simulate_dataset_jit(params, reward_matrix_stack, rng_key, baiting=False):
+@partial(jax.jit, static_argnames=['agent','baiting'])
+def simulate_dataset_jit(
+    params: chex.Array,
+    reward_matrix_stack: jnp.ndarray,
+    agent: Callable,
+    rng_key: chex.Array,
+    baiting: bool = False
+) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """
     Vectorize simulation over multiple experiments.
     
     Args:
         params: Agent parameters.
-        reward_matrix_stack: A stack of reward matrices of shape (n_experiments, num_trials, 2).
+        reward_matrix_stack: A stack of reward matrices of shape (n_experiments, num_trials, 2).    
+        agent: The agent function.
         rng_key: A base random key.
         baiting: Whether to use baiting.
     
@@ -249,13 +271,19 @@ def simulate_dataset_jit(params, reward_matrix_stack, rng_key, baiting=False):
     # Split the base rng_key into one per experiment.
     keys = jax.random.split(rng_key, n_experiments)
     # Use vmap to apply simulate_experiment_jit to each experiment.
-    sim_fn = lambda key, rew: simulate_experiment_jit(params, rew, key, baiting)
+    sim_fn = lambda key, rew: simulate_experiment_jit(params, rew, agent, key, baiting)
     choices, rewards = jax.vmap(sim_fn)(keys, reward_matrix_stack)
     return choices, rewards
 
 
-@partial(jax.jit, static_argnames=['baiting'])
-def simulate_dataset_jit_different_params(params_stack, reward_matrix_stack, rng_key, baiting=False):
+@partial(jax.jit, static_argnames=['agent','baiting'])
+def simulate_dataset_jit_different_params(
+    params_stack: chex.Array,
+    reward_matrix_stack: jnp.ndarray,
+    agent: Callable,
+    rng_key: chex.Array,
+    baiting: bool = False
+) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """
     Vectorized simulation over multiple experiments with different parameters.
     
@@ -273,7 +301,7 @@ def simulate_dataset_jit_different_params(params_stack, reward_matrix_stack, rng
     # Split the base rng_key into one per experiment.
     keys = jax.random.split(rng_key, n_experiments)
     # Use vmap to apply simulate_experiment_jit to each experiment.
-    sim_fn = lambda key, params, rew: simulate_experiment_jit(params, rew, key, baiting)
+    sim_fn = lambda key, params, rew: simulate_experiment_jit(params, rew, agent, key, baiting)
     choices, rewards = jax.vmap(sim_fn, in_axes=(0, 0, 0))(keys, params_stack, reward_matrix_stack)
     return choices, rewards
 

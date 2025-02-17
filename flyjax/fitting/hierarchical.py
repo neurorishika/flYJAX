@@ -4,10 +4,13 @@ import chex
 import optax
 from typing import List, Tuple, Callable, Optional, Dict, Union
 from tqdm.auto import trange
+from flyjax.fitting.evaluation import total_negative_log_likelihood
+
 
 def total_nll_hierarchical(
     theta_pop: chex.Array,       # Population-level (group-level) parameters, shape (n_params,)
     theta_subjects: chex.Array,    # Subject-specific parameters, shape (n_subjects, n_params)
+    agent: Callable,
     experiments_by_subject: List[List[Tuple[chex.Array, chex.Array]]],
     sigma_prior: float = 1.0
 ) -> jnp.ndarray:
@@ -21,6 +24,8 @@ def total_nll_hierarchical(
     Args:
         theta_pop: Population-level parameters (shape: [n_params]).
         theta_subjects: Subject-specific parameters (shape: [n_subjects, n_params]).
+        agent: The agent model function that takes parameters and agent state and returns
+            a tuple (action_probs, new_agent_state).
         experiments_by_subject: A list of length n_subjects; each element is a list of experiments
                                 (each experiment is a tuple (choices, rewards)) for that subject.
         sigma_prior: Standard deviation for the Gaussian prior on the difference.
@@ -36,7 +41,7 @@ def total_nll_hierarchical(
         # Sum NLL over all experiments for subject s.
         for exp in experiments_by_subject[s]:
             # Wrap the experiment tuple in a list.
-            subject_nll += total_negative_log_likelihood(theta_s, [exp])
+            subject_nll += total_negative_log_likelihood(theta_s, agent, [exp])
         # Penalty term: (theta_s - theta_pop)^2/(2*sigma_prior^2)
         penalty = jnp.sum((theta_s - theta_pop)**2) / (2.0 * sigma_prior**2)
         total_nll += subject_nll + penalty
@@ -46,6 +51,7 @@ def total_nll_hierarchical(
 def hierarchical_train_model(
     init_theta_pop: chex.Array,           # shape (n_params,)
     init_theta_subjects: chex.Array,        # shape (n_subjects, n_params)
+    agent: Callable,
     experiments_by_subject: List[List[Tuple[chex.Array, chex.Array]]],
     n_params: int = 4,
     learning_rate: float = 0.01,
@@ -72,7 +78,7 @@ def hierarchical_train_model(
         # Reshape the remaining parameters into (n_subjects, n_params)
         theta_subjects = params[n_params:].reshape(-1, n_params)
         loss, grads = jax.value_and_grad(total_nll_hierarchical, argnums=(0,1))(
-            theta_pop, theta_subjects, experiments_by_subject, sigma_prior)
+            theta_pop, theta_subjects, agent, experiments_by_subject, sigma_prior)
         # Concatenate the two gradients to form one gradient vector.
         grads_combined = jnp.concatenate([grads[0], grads[1].flatten()])
         updates, opt_state = optimizer.update(grads_combined, opt_state)
@@ -92,6 +98,7 @@ def multi_start_hierarchical_train(
     n_restarts: int,
     init_theta_pop_sampler: Callable[[], chex.Array],
     init_theta_subjects_sampler: Callable[[], chex.Array],
+    agent: Callable,
     experiments_by_subject: List[List[Tuple[chex.Array, chex.Array]]],
     n_params: int = 4,
     learning_rate: float = 0.01,
@@ -115,7 +122,7 @@ def multi_start_hierarchical_train(
         init_theta_pop = init_theta_pop_sampler()
         init_theta_subjects = init_theta_subjects_sampler()
         theta_pop_opt, theta_subjects_opt = hierarchical_train_model(
-            init_theta_pop, init_theta_subjects,
+            init_theta_pop, init_theta_subjects, agent,
             experiments_by_subject,
             n_params=n_params,
             learning_rate=learning_rate,
@@ -125,7 +132,7 @@ def multi_start_hierarchical_train(
         )
         # Evaluate joint NLL for these parameters.
         hierarchical_nll = total_nll_hierarchical(
-            theta_pop_opt, theta_subjects_opt, experiments_by_subject, sigma_prior)
+            theta_pop_opt, theta_subjects_opt, agent, experiments_by_subject, sigma_prior)
         print(f"Restart {i+1} final Hierarchical NLL: {hierarchical_nll:.4f}")
         all_losses.append(float(hierarchical_nll))
         if hierarchical_nll < best_loss:
@@ -139,6 +146,7 @@ def multi_start_hierarchical_train(
 def evaluate_hierarchical_model(
     theta_pop: chex.Array,
     theta_subjects: chex.Array,
+    agent: Callable,
     experiments_by_subject: List[List[Tuple[chex.Array, chex.Array]]],
     sigma_prior: float = 1.0
 ) -> Tuple[float, float, float]:
@@ -149,10 +157,10 @@ def evaluate_hierarchical_model(
     Returns:
         (nll_pop, nll_subjects, hierarchical_nll)
     """
-    nll_pop = total_negative_log_likelihood(theta_pop, experiments_by_subject[0])
+    nll_pop = total_negative_log_likelihood(theta_pop, agent, experiments_by_subject[0])
     nll_subjects = 0.0
     for s, exps in enumerate(experiments_by_subject):
-        nll_subjects += total_negative_log_likelihood(theta_subjects[s], exps)
+        nll_subjects += total_negative_log_likelihood(theta_subjects[s], agent, exps)
     penalty = jnp.sum((theta_subjects - theta_pop)**2) / (2.0 * sigma_prior**2)
     hierarchical_nll = nll_pop + nll_subjects + penalty
     return float(nll_pop), float(nll_subjects), float(hierarchical_nll)
