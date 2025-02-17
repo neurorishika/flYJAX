@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "rpytemplate"
+name = "flyjax"
 version = "0.1.0"
 description = ""
 authors = ["Rishika Mohanta <neurorishika@gmail.com>"]
