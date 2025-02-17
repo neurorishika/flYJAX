@@ -6,56 +6,53 @@ from typing import List, Tuple, Callable, Optional, Dict, Union
 from tqdm.auto import trange
 from flyjax.fitting.evaluation import total_negative_log_likelihood
 
+
 def train_model(
     init_params: chex.Array,
     agent: Callable,
     experiments: List[Tuple[chex.Array, chex.Array]],
-    learning_rate: float = 0.01,
-    num_steps: int = 1000,
+    learning_rate: float = 5e-2,
+    num_steps: int = 10000,
     verbose: bool = True,
     progress_bar: bool = True,
     callback: Optional[Callable[[int, chex.Array, float], None]] = None,
     early_stopping: Optional[Dict[str, float]] = None,
-    return_history: bool = False
-) -> Union[chex.Array, Tuple[chex.Array, Dict[str, List]]]:
+    return_history: bool = False,
+) -> Union[chex.Array, Tuple[chex.Array, Dict[str, List], bool]]:
     """
-    Fit the model parameters to the simulated experiments using Adam optimization.
+    Fit the model parameters to the simulated experiments using AdaBelief optimization.
 
     Additional features:
-      - Verbose logging and optional tqdm progress bar.
-      - An optional callback is called every iteration with the iteration index,
-        current parameters, and loss.
-      - Early stopping: If provided, training will stop early when the loss does not
-        improve by at least `min_delta` for `patience` consecutive steps.
-        Example: early_stopping = {"patience": 100, "min_delta": 1e-4}
-      - History tracking: If return_history=True, returns a dictionary containing the loss
-        history and (optionally) parameter history.
+      - Convergence is checked every 100 steps: if the relative change in loss compared
+        to 100 steps ago is less than the convergence threshold (default 1e-2), training stops.
+      - The optimizer is AdaBelief with a learning rate of 5e-2.
+      - Training runs for up to 10,000 steps unless early stopping criteria are met.
 
     Args:
         init_params: Initial guess for the parameters.
-        agent: The agent model function that takes parameters and agent state and returns
-            a tuple (action_probs, new_agent_state).
+        agent: The agent model function that takes parameters and agent state and returns a tuple (action_probs, new_agent_state).
         experiments: List of experiments, each as a tuple (choices, rewards).
-        learning_rate: Learning rate for the Adam optimizer.
-        num_steps: Maximum number of training steps.
-        verbose: If True, prints loss information at regular intervals.
+        learning_rate: Learning rate (default 5e-2).
+        num_steps: Maximum number of training steps (default 10,000).
+        verbose: If True, prints loss information every 100 steps.
         progress_bar: If True, uses a tqdm progress bar.
-        callback: Optional callable f(step, params, loss) executed each iteration.
-        early_stopping: Optional dictionary with keys "patience" (int) and "min_delta" (float).
-        return_history: If True, returns a history dictionary along with the final parameters.
+        callback: Optional function to call every iteration.
+        early_stopping: Dictionary with keys "patience" and "min_delta" for additional early stopping.
+        return_history: If True, returns history along with final parameters.
 
     Returns:
-        If return_history is False: final optimized parameters.
-        If return_history is True: a tuple (best_params, history_dict), where history_dict contains:
-           - "loss": List of loss values per step.
-           - "params": (Optional) List of parameter values (can be large).
+        If return_history is False: a tuple (final optimized parameters, converged_flag).
+        If return_history is True: a tuple (final optimized parameters, history_dict, converged_flag),
+        where converged_flag indicates whether convergence (via the relative change test) was reached.
     """
-    optimizer = optax.adam(learning_rate)
+    optimizer = optax.adabelief(learning_rate)
     opt_state = optimizer.init(init_params)
-    
+
     @jax.jit
     def step_fn(params, opt_state):
-        loss, grads = jax.value_and_grad(total_negative_log_likelihood)(params, agent, experiments)
+        loss, grads = jax.value_and_grad(total_negative_log_likelihood)(
+            params, agent, experiments
+        )
         updates, opt_state = optimizer.update(grads, opt_state)
         params = optax.apply_updates(params, updates)
         return params, opt_state, loss
@@ -63,15 +60,20 @@ def train_model(
     # Setup history tracking
     history = {"loss": []}
     if return_history:
-        history["params"] = []  # be cautious: this can grow large for many steps
+        history["params"] = []  # be cautious: can grow large
 
     best_loss = jnp.inf
     best_params = init_params
     patience_counter = 0
-    patience = early_stopping.get("patience", 100) if early_stopping is not None else None
-    min_delta = early_stopping.get("min_delta", 1e-4) if early_stopping is not None else None
+    # Use early_stopping min_delta if provided, otherwise default convergence threshold 1e-2
+    convergence_threshold = (
+        early_stopping.get("min_delta", 1e-2) if early_stopping is not None else 1e-2
+    )
 
-    # Choose an iterator: either a tqdm progress bar or a simple range.
+    last_checkpoint_loss = None
+    converged = False
+
+    # Choose an iterator: tqdm if enabled, else simple range.
     iterator = trange(num_steps, desc="Training") if progress_bar else range(num_steps)
 
     params = init_params
@@ -84,7 +86,23 @@ def train_model(
         if return_history:
             history["params"].append(params)
 
-        # Verbose printing at regular intervals.
+        # Every 100 steps, check convergence.
+        if i % 100 == 0:
+            if last_checkpoint_loss is not None:
+                rel_change = abs(
+                    (loss_val - last_checkpoint_loss) / last_checkpoint_loss
+                )
+                if rel_change < convergence_threshold:
+                    if verbose:
+                        print(
+                            f"Convergence reached at step {i} with relative change {rel_change:.4f}."
+                        )
+                    best_params = params
+                    converged = True
+                    break
+            last_checkpoint_loss = loss_val
+
+        # Verbose printing every 100 steps.
         if verbose and (i % 100 == 0):
             print(f"Step {i:4d}, Negative Log Likelihood: {loss_val:.4f}")
 
@@ -92,23 +110,23 @@ def train_model(
         if callback is not None:
             callback(i, params, loss_val)
 
-        # Early stopping check.
+        # Additional early stopping (patience based) if provided.
         if early_stopping is not None:
-            if best_loss - loss_val > min_delta:
+            if best_loss - loss_val > early_stopping.get("min_delta", 1e-4):
                 best_loss = loss_val
                 best_params = params
-                patience_counter = 0  # reset the counter on improvement
+                patience_counter = 0  # reset counter on improvement
             else:
                 patience_counter += 1
-                if patience_counter >= patience:
+                if patience_counter >= early_stopping.get("patience", 100):
                     if verbose:
                         print(f"Early stopping at step {i} with loss {loss_val:.4f}")
-                    params = best_params
+                    best_params = params
                     break
 
     if return_history:
-        return params, history
-    return params
+        return params, history, converged
+    return params, converged
 
 
 def multi_start_train(
@@ -116,68 +134,82 @@ def multi_start_train(
     init_param_sampler: Callable[[], chex.Array],
     agent: Callable,
     training_experiments: List[Tuple[chex.Array, chex.Array]],
-    learning_rate: float = 0.01,
-    num_steps: int = 1000,
+    learning_rate: float = 5e-2,
+    num_steps: int = 10000,
+    min_num_converged: int = 3,
     verbose: bool = True,
     progress_bar: bool = True,
-    early_stopping: Optional[Dict[str, float]] = None
+    early_stopping: Optional[Dict[str, float]] = None,
 ) -> Tuple[chex.Array, List[float]]:
     """
-    Perform multiple training runs (with different random initializations) and return the best parameters.
-    
+    Perform multiple training runs with different random initializations and return the best parameters.
+
+    In addition, the process stops early if at least 3 runs have converged to the current best.
+
     Args:
-        n_restarts: Number of independent training runs.
-        init_param_sampler: A function that returns an initial parameter array.
-        agent: The agent model function that takes parameters and agent state and returns
+        n_restarts: Number of training runs.
+        init_param_sampler: Function returning a new initial parameter array.
+        agent: The agent model function.
         training_experiments: The dataset (list of experiments) to train on.
-        learning_rate: Learning rate for training.
-        num_steps: Number of training steps per run.
-        verbose: If True, prints information during training.
-        progress_bar: If True, displays a progress bar.
-        early_stopping: Early stopping options as in train_model.
-        
+        learning_rate: Learning rate (default 5e-2).
+        num_steps: Maximum training steps per run (default 10,000).
+        min_num_converged: Minimum number of runs that must converge to the best loss.
+        verbose: If True, prints progress information.
+        progress_bar: If True, displays a tqdm progress bar.
+        early_stopping: Dictionary with early stopping parameters.
+
     Returns:
-        best_params: The recovered parameters with the lowest training negative log likelihood.
-        losses: A list of final training losses for each restart.
+        A tuple (best_params, best_loss) where best_loss is the final negative log likelihood.
     """
     best_params = None
     best_loss = jnp.inf
     all_losses = []
-    
+    num_converged = 0
+
     for i in range(n_restarts):
         print(f"\n--- Restart {i+1}/{n_restarts} ---")
         # Get a new random initialization.
         init_params = init_param_sampler()
-        # Train the model.
-        recovered_params = train_model(
-            init_params, 
+        # Train the model; train_model now returns a tuple (params, converged_flag).
+        recovered_params, converged = train_model(
+            init_params,
             agent,
             training_experiments,
             learning_rate=learning_rate,
             num_steps=num_steps,
             verbose=verbose,
             progress_bar=progress_bar,
-            early_stopping=early_stopping
+            early_stopping=early_stopping,
+            return_history=False,
         )
-        # Evaluate training performance (e.g., final negative log likelihood).
-        train_nll = total_negative_log_likelihood(recovered_params, agent, training_experiments)
+        train_nll = total_negative_log_likelihood(
+            recovered_params, agent, training_experiments
+        )
         print(f"Restart {i+1} final training NLL: {train_nll:.4f}")
         all_losses.append(float(train_nll))
+        if converged:
+            num_converged += 1
         if train_nll < best_loss:
             best_loss = train_nll
             best_params = recovered_params
+        if num_converged >= min_num_converged:
+            print(
+                f"Stopping early because {min_num_converged} runs have converged to the current best loss."
+            )
+            break
 
     print(f"\nBest training NLL: {best_loss:.4f}")
     return best_params, best_loss
 
+
 def evaluate_model(
     params: chex.Array,
     agent: Callable,
-    experiments: List[Tuple[chex.Array, chex.Array]]
+    experiments: List[Tuple[chex.Array, chex.Array]],
 ) -> float:
     """
     Evaluate the model on a set of experiments by computing the total negative log likelihood.
-    
+
     Lower values indicate a better predictive fit.
     """
     nll = total_negative_log_likelihood(params, agent, experiments)
