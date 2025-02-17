@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import chex
 from typing import Optional, Tuple
 
-def agent(
+def base_agent(
     params: chex.Array,
     agent_state: Optional[chex.Array] = None,
     choice: Optional[int] = None,
