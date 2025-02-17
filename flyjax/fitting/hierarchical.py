@@ -141,7 +141,7 @@ def multi_start_hierarchical_train(
             best_theta_subjects = theta_subjects_opt
             
     print(f"\nBest Hierarchical NLL: {best_loss:.4f}")
-    return best_theta_pop, best_theta_subjects, all_losses
+    return best_theta_pop, best_theta_subjects, best_loss
 
 def evaluate_hierarchical_model(
     theta_pop: chex.Array,

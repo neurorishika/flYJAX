@@ -140,7 +140,7 @@ def multi_start_joint_train(
             best_delta = delta_opt
             
     print(f"\nBest Joint NLL: {best_loss:.4f}")
-    return best_theta, best_delta, all_losses
+    return best_theta, best_delta, best_loss
 
 def evaluate_joint_model(
     theta_control: chex.Array,

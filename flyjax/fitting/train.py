@@ -168,7 +168,7 @@ def multi_start_train(
             best_params = recovered_params
 
     print(f"\nBest training NLL: {best_loss:.4f}")
-    return best_params, all_losses
+    return best_params, best_loss
 
 def evaluate_model(
     params: chex.Array,
