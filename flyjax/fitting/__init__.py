@@ -48,6 +48,8 @@ __getattr__, __dir__, __all__ = lazy_loader.attach(
         'samplers': [
             'base_randn_sampler',
             'base_uniform_sampler',
+            'make_base_randn_sampler',
+            'make_base_uniform_sampler',
         ],
         'train': [
             'evaluate_model',
@@ -65,7 +67,8 @@ __all__ = ['aic', 'base_randn_sampler', 'base_uniform_sampler', 'bic', 'cv',
            'k_fold_cross_validation_train_hierarchical',
            'k_fold_cross_validation_train_joint', 'k_fold_split_experiments',
            'k_fold_split_subjects', 'likelihood_ratio_test',
-           'log_likelihood_experiment', 'multi_start_hierarchical_train',
+           'log_likelihood_experiment', 'make_base_randn_sampler',
+           'make_base_uniform_sampler', 'multi_start_hierarchical_train',
            'multi_start_joint_train', 'multi_start_train',
            'negative_log_likelihood_experiment',
            'parallel_k_fold_cross_validation_train',

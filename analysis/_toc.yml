@@ -1,0 +1,12 @@
+# Table of contents
+format: jb-book
+root: intro
+
+parts:
+  - caption: "Analysis"
+    chapters:
+      - file: notebooks/explore.ipynb  # (Make sure your notebook has a title cell so it shows a link)
+
+  - caption: "FlYJAX Documentation"
+    chapters:
+      - file: reference/index   # This will be the index page for your auto API docs

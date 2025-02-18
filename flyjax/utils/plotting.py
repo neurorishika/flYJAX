@@ -12,7 +12,7 @@ def plot_training_history(history: Dict[str, List], title: str = "Training Histo
     plt.legend()
     plt.show()
 
-def plot_experiment_data(experiment_data):
+def plot_single_experiment_data(experiment_data):
     choices, rewards = experiment_data
     n_trials = len(choices)
     plt.figure(figsize=(12, 2))
@@ -29,3 +29,4 @@ def plot_experiment_data(experiment_data):
     plt.ylabel('Choice')
     plt.title('Experiment Data')
     plt.show()
+

@@ -8,10 +8,10 @@ __getattr__, __dir__, __all__ = lazy_loader.attach(
     },
     submod_attrs={
         'plotting': [
-            'plot_experiment_data',
+            'plot_single_experiment_data',
             'plot_training_history',
         ],
     },
 )
 
-__all__ = ['plot_experiment_data', 'plot_training_history', 'plotting']
+__all__ = ['plot_single_experiment_data', 'plot_training_history', 'plotting']

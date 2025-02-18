@@ -12,7 +12,7 @@ from flyjax.fitting.cv import k_fold_cross_validation_train, \
     parallel_k_fold_cross_validation_train_joint, \
     parallel_k_fold_cross_validation_train_hierarchical
 from flyjax.fitting.joint import evaluate_joint_model
-from flyjax.utils.plotting import plot_experiment_data
+from flyjax.utils.plotting import plot_single_experiment_data
 from typing import Tuple, Dict, Any, List, Callable, Optional
 from flyjax.fitting.samplers import base_randn_sampler
 from functools import partial
