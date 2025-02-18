@@ -25,6 +25,9 @@ tqdm = "^4.65.0"
 jax = "^0.5.0"
 chex = "^0.1.88"
 optax = "^0.2.4"
+jupyter-book = "^1.0.3"
+sphinx-autoapi = "^3.6.0"
+myst-nb = "^1.2.0"
 
 [build-system]
 requires = ["poetry-core"]

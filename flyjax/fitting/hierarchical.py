@@ -142,6 +142,7 @@ def multi_start_hierarchical_train(
     verbose: bool = True,
     early_stopping: Optional[Dict[str, float]] = None,
     min_num_converged: int = 3,
+    progress_bar: bool = True,
 ) -> Tuple[chex.Array, chex.Array, float]:
     """
     Run multiple training runs (with different random initializations) for the hierarchical model.
@@ -172,6 +173,7 @@ def multi_start_hierarchical_train(
             sigma_prior=sigma_prior,
             verbose=verbose,
             early_stopping=early_stopping,
+            progress_bar=progress_bar,
         )
         hierarchical_nll = total_nll_hierarchical(
             theta_pop_opt,

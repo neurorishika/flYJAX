@@ -1,0 +1,44 @@
+# Book settings
+title: FlYJAX
+author: Rishika Mohanta
+logo: logo.png
+
+# Force re-execution of notebooks on each build.
+execute:
+  execute_notebooks: off
+
+# Define the name of the latex output file for PDF builds
+latex:
+  latex_documents:
+    targetname: book.tex
+
+# Add a bibtex file so that we can create citations
+bibtex_bibfiles:
+  - references.bib
+
+# Information about where the book exists on the web
+repository:
+  url: https://github.com/neurorishika/flYJAX 
+  path_to_book: docs  
+  branch: master  
+
+# Add GitHub buttons to your book
+html:
+  use_issues_button: true
+  use_repository_button: true
+
+# Add parsing of myst markdown
+parse:
+  myst_enable_extensions:
+    - colon_fence
+    - deflist
+    - dollarmath
+    - linkify
+    - substitution
+
+# Add a table of contents
+sphinx:
+  extra_extensions:
+    - autoapi.extension
+  config:
+    autoapi_dirs: ../flyjax
