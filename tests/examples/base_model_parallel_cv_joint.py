@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import chex
-from flyjax.agent.model import base_agent
+from flyjax.agent.model import test_agent
 from flyjax.simulation.simulate import simulate_experiment_jit, simulate_dataset_jit, simulate_dataset_jit_different_params
 from flyjax.simulation.parse import parse_reward_matrix
 from flyjax.fitting.cv import k_fold_cross_validation_train, \
@@ -50,7 +50,7 @@ if __name__ == "__main__":
 
     rng_key = jax.random.PRNGKey(0)
     rng_key, subkey = jax.random.split(rng_key)
-    choices, rewards = simulate_dataset_jit(true_params, jnp.stack(reward_matrices), base_agent, subkey, baiting=True)
+    choices, rewards = simulate_dataset_jit(true_params, jnp.stack(reward_matrices), test_agent, subkey, baiting=True)
     n_experiments = len(reward_matrices)
     # convert to experiment data format
     experiments = [(choices[i], rewards[i]) for i in range(n_experiments)]
@@ -64,7 +64,7 @@ if __name__ == "__main__":
 
     # --- Simulate a dataset with perturbed parameters ---
     rng_key, subkey = jax.random.split(rng_key)
-    perturbed_choices, perturbed_rewards = simulate_dataset_jit(perturbed_params, jnp.stack(reward_matrices), base_agent, subkey, baiting=True)
+    perturbed_choices, perturbed_rewards = simulate_dataset_jit(perturbed_params, jnp.stack(reward_matrices), test_agent, subkey, baiting=True)
     n_perturbed_experiments = len(reward_matrices)
     # convert to experiment data format
     perturbed_experiments = [(perturbed_choices[i], perturbed_rewards[i]) for i in range(n_perturbed_experiments)]
@@ -78,7 +78,7 @@ if __name__ == "__main__":
         k=5,
         init_theta_sampler=init_theta_sampler,
         init_delta_sampler=init_delta_sampler,
-        agent=base_agent,
+        agent=test_agent,
         learning_rate=5e-2,
         num_steps=10000,
         n_restarts=10,
@@ -96,7 +96,7 @@ if __name__ == "__main__":
     nll_control, nll_exp, joint_nll = evaluate_joint_model(
         theta,
         delta,
-        base_agent,
+        test_agent,
         experiments,
         perturbed_experiments,
         delta_penalty_sigma=1.0

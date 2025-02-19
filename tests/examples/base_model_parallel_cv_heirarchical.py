@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import chex
-from flyjax.agent.model import base_agent
+from flyjax.agent.model import test_agent
 from flyjax.simulation.simulate import simulate_experiment_jit, simulate_dataset_jit, simulate_dataset_jit_different_params
 from flyjax.simulation.parse import parse_reward_matrix
 from flyjax.fitting.cv import k_fold_cross_validation_train_hierarchical, \
@@ -56,7 +56,7 @@ if __name__ == "__main__":
 
     # Simulate the dataset for each subject.
     rng_key, subkey = jax.random.split(rng_key)
-    choices, rewards = simulate_dataset_jit_different_params(jnp.stack(subject_params), jnp.stack(reward_matrices), base_agent, rng_key, baiting=True)
+    choices, rewards = simulate_dataset_jit_different_params(jnp.stack(subject_params), jnp.stack(reward_matrices), test_agent, rng_key, baiting=True)
     # Assuming 'choices' and 'rewards' are produced by simulate_dataset_jit_different_params
     n_experiments = choices.shape[0]
     subject_experiments = [[(np.array(choices[i]), np.array(rewards[i]))] for i in range(n_experiments)] # this is done because we assume each subject has only one experiment
@@ -73,7 +73,7 @@ if __name__ == "__main__":
         init_theta_pop_sampler=init_theta_pop_sampler,
         make_sample_init_theta_subjects=make_sample_init_theta_subjects,
         k=5,
-        agent=base_agent,
+        agent=test_agent,
         learning_rate=5e-2,
         num_steps=10000,
         n_restarts=10,

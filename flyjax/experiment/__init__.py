@@ -8,9 +8,10 @@ __getattr__, __dir__, __all__ = lazy_loader.attach(
     },
     submod_attrs={
         'get': [
-            'fetch_choices_and_rewards',
+            'fetch_behavioral_data',
+            'get_experiments',
         ],
     },
 )
 
-__all__ = ['fetch_choices_and_rewards', 'get']
+__all__ = ['fetch_behavioral_data', 'get', 'get_experiments']

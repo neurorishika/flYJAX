@@ -17,8 +17,8 @@ def train_model(
     progress_bar: bool = True,
     callback: Optional[Callable[[int, chex.Array, float], None]] = None,
     early_stopping: Optional[Dict[str, float]] = None,
-    return_history: bool = False,
-) -> Union[chex.Array, Tuple[chex.Array, Dict[str, List], bool]]:
+    return_history: str = "none",
+) -> Union[Tuple[chex.Array, bool], Tuple[chex.Array, List[float], bool], Tuple[chex.Array, Dict[str, List[float]], bool]]:
     """
     Fit the model parameters to the simulated experiments using AdaBelief optimization.
 
@@ -38,12 +38,14 @@ def train_model(
         progress_bar: If True, uses a tqdm progress bar.
         callback: Optional function to call every iteration.
         early_stopping: Dictionary with keys "patience" and "min_delta" for additional early stopping.
-        return_history: If True, returns history along with final parameters.
+        return_history: If "none", only return the final parameters. If "loss", return the history of losses. If "full", also return the history of parameters.
 
     Returns:
-        If return_history is False: a tuple (final optimized parameters, converged_flag).
-        If return_history is True: a tuple (final optimized parameters, history_dict, converged_flag),
+        If return_history is "none", returns a tuple (params, converged_flag).
+        If return_history is "loss", returns a tuple (params, history, converged_flag) where history is a list of losses.
+        If return_history is "full", returns a tuple (params, history, converged_flag) where history is a dictionary with keys "loss" and "params".
         where converged_flag indicates whether convergence (via the relative change test) was reached.
+        In all cases, params is the final parameter array.
     """
     optimizer = optax.adabelief(learning_rate)
     opt_state = optimizer.init(init_params)
@@ -59,7 +61,7 @@ def train_model(
 
     # Setup history tracking
     history = {"loss": []}
-    if return_history:
+    if return_history == "full":
         history["params"] = []  # be cautious: can grow large
 
     best_loss = jnp.inf
@@ -83,7 +85,7 @@ def train_model(
 
         # Update history.
         history["loss"].append(loss_val)
-        if return_history:
+        if return_history == "full":
             history["params"].append(params)
 
         # Every 100 steps, check convergence.
@@ -124,9 +126,12 @@ def train_model(
                     best_params = params
                     break
 
-    if return_history:
+    if return_history == "full":
         return params, history, converged
-    return params, converged
+    elif return_history == "loss":
+        return params, history["loss"], converged
+    else:
+        return params, converged
 
 
 def multi_start_train(
@@ -140,7 +145,8 @@ def multi_start_train(
     verbose: bool = True,
     progress_bar: bool = True,
     early_stopping: Optional[Dict[str, float]] = None,
-) -> Tuple[chex.Array, List[float]]:
+    get_history: bool = False,
+) -> Union[Tuple[chex.Array, float], Tuple[chex.Array, float, Dict[int, List[float]]]]:
     """
     Perform multiple training runs with different random initializations and return the best parameters.
 
@@ -157,36 +163,51 @@ def multi_start_train(
         verbose: If True, prints progress information.
         progress_bar: If True, displays a tqdm progress bar.
         early_stopping: Dictionary with early stopping parameters.
+        get_history: If True, return the history of losses for each run.
 
     Returns:
         A tuple (best_params, best_loss) where best_loss is the final negative log likelihood.
     """
     best_params = None
     best_loss = jnp.inf
-    all_losses = []
+    loss_history = {}
     num_converged = 0
 
     for i in range(n_restarts):
         print(f"\n--- Restart {i+1}/{n_restarts} ---")
         # Get a new random initialization.
         init_params = init_param_sampler()
-        # Train the model; train_model now returns a tuple (params, converged_flag).
-        recovered_params, converged = train_model(
-            init_params,
-            agent,
-            training_experiments,
-            learning_rate=learning_rate,
-            num_steps=num_steps,
-            verbose=verbose,
-            progress_bar=progress_bar,
-            early_stopping=early_stopping,
-            return_history=False,
-        )
+        if get_history:
+            # Train the model and return the loss history.
+            recovered_params, history, converged = train_model(
+                init_params,
+                agent,
+                training_experiments,
+                learning_rate=learning_rate,
+                num_steps=num_steps,
+                verbose=verbose,
+                progress_bar=progress_bar,
+                early_stopping=early_stopping,
+                return_history="loss",
+            )
+            loss_history[i] = history
+        else:
+            # Train the model
+            recovered_params, converged = train_model(
+                init_params,
+                agent,
+                training_experiments,
+                learning_rate=learning_rate,
+                num_steps=num_steps,
+                verbose=verbose,
+                progress_bar=progress_bar,
+                early_stopping=early_stopping,
+                return_history="none",
+            )
         train_nll = total_negative_log_likelihood(
             recovered_params, agent, training_experiments
         )
         print(f"Restart {i+1} final training NLL: {train_nll:.4f}")
-        all_losses.append(float(train_nll))
         if converged:
             num_converged += 1
         if train_nll < best_loss:
@@ -199,7 +220,10 @@ def multi_start_train(
             break
 
     print(f"\nBest training NLL: {best_loss:.4f}")
-    return best_params, best_loss
+    if get_history:
+        return best_params, best_loss, loss_history
+    else:
+        return best_params, best_loss
 
 
 def evaluate_model(

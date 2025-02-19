@@ -39,5 +39,10 @@ with open("LICENSE", "w") as f:
         f.write(line)
 print("done.")
 
+# run jupyterbook build
+print("Building Jupyter Book...")
+call("poetry run jb clean analysis", shell=True)
+call("poetry run jb build analysis", shell=True)
+
 print("BUILD COMPLETE")
 

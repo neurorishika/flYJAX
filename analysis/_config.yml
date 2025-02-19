@@ -34,4 +34,8 @@ sphinx:
   config:
     autoapi_dirs: ../flyjax
     autoapi_root: "reference"
+    # # Prevent AutoAPI from adding its own toctree entries (since you’re using an external TOC)
+    # autoapi_add_toctree_entry: False
+    # # Customize which options are used for generating the API docs:
+    autoapi_options: ["members", "undoc-members", "show-inheritance", "special-members"]
 

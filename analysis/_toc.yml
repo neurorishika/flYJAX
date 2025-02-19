@@ -10,3 +10,4 @@ parts:
   - caption: "FlYJAX Documentation"
     chapters:
       - file: reference/index   # This will be the index page for your auto API docs
+      - glob: reference/**/*.rst
