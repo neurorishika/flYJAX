@@ -3,6 +3,31 @@ import jax
 import jax.numpy as jnp
 from typing import Callable, List, Tuple
 
+def get_state_and_probs(
+    params: chex.Array,
+    agent: Callable,
+    choices: chex.Array,
+    rewards: chex.Array,
+) -> Tuple[chex.Array, chex.Array]:
+    """
+    Returns the state and probability dynamics throughout an experiment.
+    """
+    # get initial state from the agent
+    _, initial_state = agent(params)
+    
+    def trial_step(agent_state: chex.Array, trial_data: jnp.ndarray):
+        # trial_data: [choice, reward]
+        choice, reward = trial_data.astype(jnp.int32)
+        # Retrieve current policy from the agent.
+        cur_probs, _ = agent(params, agent_state)
+        # Update agent state given the trial outcome.
+        _, new_state = agent(params, agent_state, choice, reward)
+        return new_state, (cur_probs, new_state)
+    trial_data = jnp.stack([choices, rewards], axis=1)
+    _, (probs, states) = jax.lax.scan(trial_step, initial_state, trial_data)
+    return states, probs
+
+
 def log_likelihood_experiment(
     params: chex.Array,
     agent: Callable,

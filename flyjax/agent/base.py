@@ -78,6 +78,34 @@ def one_bit_agent(
     else:
         return jnp.array([0.5, 0.5]), new_state
 
+def herrnstein_agent(
+    params: chex.Array,
+    agent_state: Optional[chex.Array] = None,
+    choice: Optional[int] = None,
+    reward: Optional[int] = None
+) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    """
+    Herrnstein's matching law agent for a binary two-armed bandit task.
+    """
+    if agent_state is None:
+        agent_state = jnp.array([0, 0])
+    
+    # get probs based on ratio of rewards p0 = s0/(s0 + s1), p1 = s1/(s0 + s1) and 0.5 if s0+s1 = 0
+    probs = jnp.where(agent_state.sum() == 0, jnp.array([0.5, 0.5]), agent_state / agent_state.sum())
+
+    if choice is None or reward is None:
+        return probs, agent_state
+
+    decay = 1 / (1 + jnp.exp(-params[0]))
+
+    # update state based on current choice and reward
+    agent_state = decay * agent_state
+    agent_state = agent_state.at[choice].set(agent_state[choice] + reward)
+
+    # recalculate probabilities based on updated state
+    new_probs = jnp.where(agent_state.sum() == 0, jnp.array([0.5, 0.5]), agent_state / agent_state.sum())
+    return new_probs, agent_state
+
 def test_agent(
     params: chex.Array,
     agent_state: Optional[chex.Array] = None,
@@ -91,9 +119,11 @@ def test_agent(
     """
     if agent_state is None:
         agent_state = jnp.array([0.5, 0.5])
+
     probs = jax.nn.softmax(agent_state)
     if choice is None or reward is None:
         return probs, agent_state
+    
     alpha_learn = 1 / (1 + jnp.exp(-params[0]))
     alpha_forget = 1 / (1 + jnp.exp(-params[1]))
     kappa_reward = params[2]

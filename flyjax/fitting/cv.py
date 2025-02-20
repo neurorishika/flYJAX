@@ -59,6 +59,7 @@ def k_fold_cross_validation_train(
     n_restarts: int = 10,
     min_num_converged: int = 3,
     early_stopping: Optional[Dict[str, float]] = None,
+    get_history: bool = False,
 ) -> Tuple[float, Dict[int, float], Dict[int, chex.Array]]:
     """
     Perform k-fold cross-validation for model training.
@@ -78,6 +79,7 @@ def k_fold_cross_validation_train(
       n_restarts: Number of random restarts for multi-start training.
       min_num_converged: Minimum number of runs that must converge to the best loss.
       early_stopping: Optional early stopping parameters.
+      get_history: Whether to return the training history.
 
     Returns:
       total_pred_ll: Total predictive log-likelihood summed over all test experiments.
@@ -95,16 +97,34 @@ def k_fold_cross_validation_train(
         test_exps = [(i, experiments[i]) for i in test_idx]  # store original index with experiment
         
         # Train the model on the training set using multi-start training
-        best_params, _ = multi_start_train(
-            n_restarts=n_restarts,
-            init_param_sampler=init_param_sampler,
-            agent=agent,
-            training_experiments=train_exps,
-            learning_rate=learning_rate,
-            num_steps=num_steps,
-            min_num_converged=min_num_converged,
-            early_stopping=early_stopping,
-        )
+        if get_history:
+            best_params, _, history = multi_start_train(
+                n_restarts=n_restarts,
+                init_param_sampler=init_param_sampler,
+                agent=agent,
+                training_experiments=train_exps,
+                learning_rate=learning_rate,
+                num_steps=num_steps,
+                min_num_converged=min_num_converged,
+                early_stopping=early_stopping,
+                progress_bar=True,
+                verbose=True,
+                get_history=True,
+            )
+        else:
+            best_params, _ = multi_start_train(
+                n_restarts=n_restarts,
+                init_param_sampler=init_param_sampler,
+                agent=agent,
+                training_experiments=train_exps,
+                learning_rate=learning_rate,
+                num_steps=num_steps,
+                min_num_converged=min_num_converged,
+                early_stopping=early_stopping,
+                progress_bar=True,
+                verbose=True,
+                get_history=False,
+            )
         fold_params[fold_idx] = best_params  # save the fitted parameters for this fold
 
         # Evaluate predictive performance on each test experiment.
@@ -119,27 +139,48 @@ def k_fold_cross_validation_train(
         print(f"Fold {fold_idx+1} predictive log-likelihood: {fold_ll:.4f}")
         total_pred_ll += fold_ll
     print(f"\nTotal predictive log-likelihood (across folds): {total_pred_ll:.4f}")
-    return total_pred_ll, per_experiment_ll, fold_params
+
+    if get_history:
+        return total_pred_ll, per_experiment_ll, fold_params, history
+    else:
+        return total_pred_ll, per_experiment_ll, fold_params
 
 
 def run_cv_fold(fold_data):
     """Helper: run one CV fold."""
     (fold_idx, train_exps, test_exps, init_param_sampler, agent,
-     learning_rate, num_steps, n_restarts, min_num_converged, early_stopping) = fold_data
+     learning_rate, num_steps, n_restarts, min_num_converged, early_stopping, get_history) = fold_data
 
     # Call your multi_start_train function on the training set.
-    best_params, _ = multi_start_train(
-        n_restarts=n_restarts,
-        init_param_sampler=init_param_sampler,
-        agent=agent,
-        training_experiments=train_exps,
-        learning_rate=learning_rate,
-        num_steps=num_steps,
-        min_num_converged=min_num_converged,
-        early_stopping=early_stopping,
-        progress_bar=False,
-        verbose=False,
-    )
+    if get_history:
+        best_params, _, history = multi_start_train(
+            n_restarts=n_restarts,
+            init_param_sampler=init_param_sampler,
+            agent=agent,
+            training_experiments=train_exps,
+            learning_rate=learning_rate,
+            num_steps=num_steps,
+            min_num_converged=min_num_converged,
+            early_stopping=early_stopping,
+            progress_bar=False,
+            verbose=False,
+            get_history=True,
+        )
+    else:
+        best_params, _ = multi_start_train(
+            n_restarts=n_restarts,
+            init_param_sampler=init_param_sampler,
+            agent=agent,
+            training_experiments=train_exps,
+            learning_rate=learning_rate,
+            num_steps=num_steps,
+            min_num_converged=min_num_converged,
+            early_stopping=early_stopping,
+            progress_bar=False,
+            verbose=False,
+            get_history=False,
+        )
+
     # Evaluate predictive performance on test experiments.
     fold_ll = 0.0
     per_experiment_ll = {}
@@ -148,7 +189,11 @@ def run_cv_fold(fold_data):
         per_experiment_ll[exp_idx] = ll
         fold_ll += ll
     print(f"Fold {fold_idx} done, fold_ll = {fold_ll:.4f}")
-    return fold_idx, fold_ll, per_experiment_ll, best_params
+
+    if get_history:
+        return fold_idx, fold_ll, per_experiment_ll, best_params, history
+    else:
+        return fold_idx, fold_ll, per_experiment_ll, best_params
 
 def parallel_k_fold_cross_validation_train(
     experiments: List[Tuple[chex.Array, chex.Array]],
@@ -160,6 +205,7 @@ def parallel_k_fold_cross_validation_train(
     n_restarts: int = 10,
     min_num_converged: int = 3,
     early_stopping: Optional[Dict[str, float]] = None,
+    get_history: bool = False,
 ) -> Tuple[float, Dict[int, float], Dict[int, chex.Array]]:
     """
     Parallel version of k-fold cross-validation for the base model.
@@ -176,19 +222,31 @@ def parallel_k_fold_cross_validation_train(
         test_exps = [(i, experiments[i]) for i in test_idx]
         cv_fold_data.append((fold_idx, train_exps, test_exps,
                              init_param_sampler, agent, learning_rate,
-                             num_steps, n_restarts, min_num_converged, early_stopping))
+                             num_steps, n_restarts, min_num_converged, early_stopping, get_history))
     
     total_pred_ll = 0.0
     per_experiment_ll = {}
     fold_params = {}
+    fold_history = {}
+
     with ProcessPoolExecutor() as executor:
         results = list(executor.map(run_cv_fold, cv_fold_data))
-    for fold_idx, fold_ll, fold_exp_ll, best_params in results:
-        total_pred_ll += fold_ll
-        per_experiment_ll.update(fold_exp_ll)
-        fold_params[fold_idx] = best_params
-    print(f"\nTotal predictive log-likelihood (across folds): {total_pred_ll:.4f}")
-    return total_pred_ll, per_experiment_ll, fold_params
+
+    if get_history:
+        for fold_idx, fold_ll, fold_exp_ll, best_params, history in results:
+            total_pred_ll += fold_ll
+            per_experiment_ll.update(fold_exp_ll)
+            fold_params[fold_idx] = best_params
+            fold_history[fold_idx] = history
+        print(f"\nTotal predictive log-likelihood (across folds): {total_pred_ll:.4f}")
+        return total_pred_ll, per_experiment_ll, fold_params, fold_history
+    else:
+        for fold_idx, fold_ll, fold_exp_ll, best_params in results:
+            total_pred_ll += fold_ll
+            per_experiment_ll.update(fold_exp_ll)
+            fold_params[fold_idx] = best_params
+        print(f"\nTotal predictive log-likelihood (across folds): {total_pred_ll:.4f}")
+        return total_pred_ll, per_experiment_ll, fold_params
 
 
 def k_fold_cross_validation_train_joint(
@@ -203,6 +261,8 @@ def k_fold_cross_validation_train_joint(
     n_restarts: int = 10,
     min_num_converged: int = 3,
     early_stopping: Optional[Dict[str, float]] = None,
+    delta_penalty_sigma: float = 1.0,
+    get_history: bool = False,
 ) -> Tuple[float, Dict[str, float], Dict[str, Tuple[chex.Array, chex.Array]]]:
     """
     Perform k-fold cross-validation for the joint model.
@@ -224,6 +284,8 @@ def k_fold_cross_validation_train_joint(
       n_restarts: Number of random restarts for multi-start training.
       min_num_converged: Minimum number of runs that must converge to the best loss.
       early_stopping: Optional dictionary with early stopping parameters.
+      delta_penalty_sigma: Penalty for the delta norm (default 1.0).
+      get_history: Whether to return the training history.
 
     Returns:
       total_pred_ll: Total predictive log-likelihood summed over all test experiments.
@@ -237,6 +299,7 @@ def k_fold_cross_validation_train_joint(
     total_pred_ll = 0.0
     per_experiment_ll = {}  # keys like "control_3" or "exp_5"
     fold_params = {}  # new: store (best_theta, best_delta) per fold
+    fold_history = {}  # new: store training history per fold
 
     for fold_idx in range(k):
         print(f"\n=== Joint Fold {fold_idx+1}/{k} ===")
@@ -248,21 +311,43 @@ def k_fold_cross_validation_train_joint(
         train_idx_exp, test_idx_exp = splits_exp[fold_idx]
         train_exp = [experiments_treatment[i] for i in train_idx_exp]
         test_exp = [(i, experiments_treatment[i]) for i in test_idx_exp]
+        
+        if get_history:
+            # Train joint model on the union of control and experimental training sets.
+            best_theta, best_delta, _, history = multi_start_joint_train(
+                init_theta_sampler=init_theta_sampler,
+                init_delta_sampler=init_delta_sampler,
+                agent=agent,
+                experiments_control=train_control,
+                experiments_treatment=train_exp,
+                learning_rate=learning_rate,
+                num_steps=num_steps,
+                n_restarts=n_restarts,
+                min_num_converged=min_num_converged,
+                early_stopping=early_stopping,
+                delta_penalty_sigma=delta_penalty_sigma,
+                verbose=True,
+                progress_bar=True,
+                get_history=True,
+            )
+        else:
+            best_theta, best_delta, _ = multi_start_joint_train(
+                init_theta_sampler=init_theta_sampler,
+                init_delta_sampler=init_delta_sampler,
+                agent=agent,
+                experiments_control=train_control,
+                experiments_treatment=train_exp,
+                learning_rate=learning_rate,
+                num_steps=num_steps,
+                n_restarts=n_restarts,
+                min_num_converged=min_num_converged,
+                early_stopping=early_stopping,
+                delta_penalty_sigma=delta_penalty_sigma,
+                verbose=True,
+                progress_bar=True,
+                get_history=False,
+            )
 
-        # Train joint model on the union of control and experimental training sets.
-        best_theta, best_delta, _ = multi_start_joint_train(
-            init_theta_sampler=init_theta_sampler,
-            init_delta_sampler=init_delta_sampler,
-            agent=agent,
-            experiments_control=train_control,
-            experiments_treatment=train_exp,
-            learning_rate=learning_rate,
-            num_steps=num_steps,
-            n_restarts=n_restarts,
-            min_num_converged=min_num_converged,
-            early_stopping=early_stopping,
-            verbose=True,
-        )
         fold_params[fold_idx] = (best_theta, best_delta)  # store fitted parameters
 
         fold_ll = 0.0
@@ -288,27 +373,51 @@ def k_fold_cross_validation_train_joint(
         total_pred_ll += fold_ll
 
     print(f"\nTotal joint predictive log-likelihood (across folds): {total_pred_ll:.4f}")
-    return total_pred_ll, per_experiment_ll, fold_params
+
+    if get_history:
+        return total_pred_ll, per_experiment_ll, fold_params, fold_history
+    else:
+        return total_pred_ll, per_experiment_ll, fold_params
 
 def run_cv_fold_joint(fold_data):
     (fold_idx, train_control, test_control, train_exp, test_exp,
      init_theta_sampler, init_delta_sampler, agent, learning_rate,
-     num_steps, n_restarts, min_num_converged, early_stopping) = fold_data
+     num_steps, n_restarts, min_num_converged, early_stopping, delta_penalty_sigma, get_history) = fold_data
 
-    best_theta, best_delta, _ = multi_start_joint_train(
-        n_restarts=n_restarts,
-        init_theta_sampler=init_theta_sampler,
-        init_delta_sampler=init_delta_sampler,
-        agent=agent,
-        experiments_control=train_control,
-        experiments_treatment=train_exp,
-        learning_rate=learning_rate,
-        num_steps=num_steps,
-        min_num_converged=min_num_converged,
-        early_stopping=early_stopping,
-        verbose=False,
-        progress_bar=False,
-    )
+    if get_history:
+        best_theta, best_delta, _, history = multi_start_joint_train(
+            n_restarts=n_restarts,
+            init_theta_sampler=init_theta_sampler,
+            init_delta_sampler=init_delta_sampler,
+            agent=agent,
+            experiments_control=train_control,
+            experiments_treatment=train_exp,
+            learning_rate=learning_rate,
+            num_steps=num_steps,
+            min_num_converged=min_num_converged,
+            early_stopping=early_stopping,
+            verbose=False,
+            progress_bar=False,
+            get_history=True,
+            delta_penalty_sigma=delta_penalty_sigma,
+        )
+    else:
+        best_theta, best_delta, _ = multi_start_joint_train(
+            n_restarts=n_restarts,
+            init_theta_sampler=init_theta_sampler,
+            init_delta_sampler=init_delta_sampler,
+            agent=agent,
+            experiments_control=train_control,
+            experiments_treatment=train_exp,
+            learning_rate=learning_rate,
+            num_steps=num_steps,
+            min_num_converged=min_num_converged,
+            early_stopping=early_stopping,
+            verbose=False,
+            progress_bar=False,
+            delta_penalty_sigma=delta_penalty_sigma,
+        )
+
     fold_ll = 0.0
     per_experiment_ll = {}
     # Evaluate control test set.
@@ -323,7 +432,11 @@ def run_cv_fold_joint(fold_data):
         per_experiment_ll[f"exp_{exp_idx}"] = ll
         fold_ll += ll
     print(f"Joint fold {fold_idx} done, fold_ll = {fold_ll:.4f}")
-    return fold_idx, fold_ll, per_experiment_ll, (best_theta, best_delta)
+
+    if get_history:
+        return fold_idx, fold_ll, per_experiment_ll, best_theta, best_delta, history
+    else:
+        return fold_idx, fold_ll, per_experiment_ll, best_theta, best_delta
 
 def parallel_k_fold_cross_validation_train_joint(
     experiments_control: List[Tuple[chex.Array, chex.Array]],
@@ -337,10 +450,14 @@ def parallel_k_fold_cross_validation_train_joint(
     n_restarts: int = 10,
     min_num_converged: int = 3,
     early_stopping: Optional[Dict[str, float]] = None,
+    delta_penalty_sigma: float = 1.0,
+    get_history: bool = False,
 ) -> Tuple[float, Dict[str, float], Dict[int, Tuple[chex.Array, chex.Array]]]:
+
     splits_control = k_fold_split_experiments(experiments_control, k)
     splits_exp = k_fold_split_experiments(experiments_treatment, k)
     cv_fold_data = []
+
     for fold_idx in range(k):
         train_idx_control, test_idx_control = splits_control[fold_idx]
         train_control = [experiments_control[i] for i in train_idx_control]
@@ -350,19 +467,32 @@ def parallel_k_fold_cross_validation_train_joint(
         test_exp = [(i, experiments_treatment[i]) for i in test_idx_exp]
         cv_fold_data.append((fold_idx, train_control, test_control, train_exp, test_exp,
                              init_theta_sampler, init_delta_sampler, agent, learning_rate,
-                             num_steps, n_restarts, min_num_converged, early_stopping))
+                             num_steps, n_restarts, min_num_converged, early_stopping, 
+                             delta_penalty_sigma, get_history))
     
     total_pred_ll = 0.0
     per_experiment_ll = {}
     fold_params = {}
     with ProcessPoolExecutor() as executor:
         results = list(executor.map(run_cv_fold_joint, cv_fold_data))
-    for fold_idx, fold_ll, fold_exp_ll, best_params in results:
-        total_pred_ll += fold_ll
-        per_experiment_ll.update(fold_exp_ll)
-        fold_params[fold_idx] = best_params
-    print(f"\nTotal joint predictive log-likelihood: {total_pred_ll:.4f}")
-    return total_pred_ll, per_experiment_ll, fold_params
+    
+    if get_history:
+        fold_history = {}
+        for fold_idx, fold_ll, fold_exp_ll, best_theta, best_delta, history in results:
+            total_pred_ll += fold_ll
+            per_experiment_ll.update(fold_exp_ll)
+            fold_params[fold_idx] = (best_theta, best_delta)
+            fold_history[fold_idx] = history
+        print(f"\nTotal joint predictive log-likelihood: {total_pred_ll:.4f}")
+        return total_pred_ll, per_experiment_ll, fold_params, fold_history
+    else:
+        for fold_idx, fold_ll, fold_exp_ll, best_theta, best_delta in results:
+            total_pred_ll += fold_ll
+            per_experiment_ll.update(fold_exp_ll)
+            fold_params[fold_idx] = (best_theta, best_delta)
+        print(f"\nTotal joint predictive log-likelihood: {total_pred_ll:.4f}")
+        return total_pred_ll, per_experiment_ll, fold_params
+
 
 def k_fold_cross_validation_train_hierarchical(
     experiments_by_subject: List[List[Tuple[chex.Array, chex.Array]]],
