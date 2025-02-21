@@ -1,9 +1,11 @@
-# flyjax/fitting/cv.py
+"""
+flyjax/fitting/cv.py
+"""
 import numpy as np
 import jax
 import jax.numpy as jnp
 import chex
-from typing import List, Tuple, Callable, Dict, Optional
+from typing import List, Tuple, Callable, Dict, Optional, Union
 from tqdm.auto import trange
 from flyjax.fitting.train import multi_start_train
 from flyjax.fitting.joint import multi_start_joint_train

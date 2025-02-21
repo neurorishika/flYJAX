@@ -145,7 +145,7 @@ def hierarchical_train_model(
     iterator = trange(num_steps, desc="Hierarchical Training") if progress_bar else range(num_steps)
     params = init_params
     for i in iterator:
-        params, opt_state, loss = step_fn(params, opt_state)
+        new_params, loss, opt_state = step_fn(params, opt_state)
         loss_val = float(loss)
         history["loss"].append(loss_val)
         if return_history == "full":
